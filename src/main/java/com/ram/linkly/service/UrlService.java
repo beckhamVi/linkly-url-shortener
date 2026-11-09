@@ -79,4 +79,16 @@ public class UrlService {
         redisTemplate.opsForValue().set(cacheKey, shortUrl.getOriginalUrl(), ttl);
         return shortUrl.getOriginalUrl();
     }
+
+    @Transactional
+    public ShortUrl findActive(String code) {
+        ShortUrl shortUrl = shortUrlRepository.findByCode(code)
+                .orElseThrow(() -> new NotFoundException("short URL not found: " + code));
+
+        if (shortUrl.getExpiresAt() != null && !shortUrl.getExpiresAt().isAfter(Instant.now())) {
+            throw new GoneException("short URL expired: " + code);
+        }
+        return shortUrl;
+    }
+
 }
