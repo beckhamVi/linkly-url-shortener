@@ -1,5 +1,6 @@
 package com.ram.linkly.controller;
 
+import com.ram.linkly.service.ClickCounterService;
 import com.ram.linkly.service.UrlService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -18,10 +19,12 @@ import com.ram.linkly.service.ClickService;
 public class RedirectController {
     private final UrlService urlService;
     private final ClickService clickService;
+    private final ClickCounterService clickCounterService;
 
     @GetMapping("/{code}")
     public ResponseEntity<Void> redirect(@PathVariable String code, HttpServletRequest request) {
         String originalUrl = urlService.resolve(code);
+        clickCounterService.increment(code);
 
         clickService.record(
                 urlService.findActive(code),
