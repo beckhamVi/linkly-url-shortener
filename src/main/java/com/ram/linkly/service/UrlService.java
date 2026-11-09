@@ -2,12 +2,13 @@ package com.ram.linkly.service;
 
 import com.ram.linkly.dto.CreateUrlRequest;
 import com.ram.linkly.entity.ShortUrl;
+import com.ram.linkly.exception.NotFoundException;
 import com.ram.linkly.repository.ShortUrlRepository;
 import com.ram.linkly.util.Base62Encoder;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
@@ -41,5 +42,15 @@ public class UrlService {
 
         saved.setCode(Base62Encoder.encode(saved.getId()));
         return saved;
+    }
+
+    @Transactional(readOnly = true)
+    public String resolve(String code){
+        ShortUrl shortUrl = shortUrlRepository.findByCode(code)
+                .orElseThrow(() -> new NotFoundException("short URL not found" + code));
+        if (shortUrl.getExpiresAt() != null && !shortUrl.getExpiresAt().isAfter(Instant.now())){
+            throw new NotFoundException("short URL expired: " + code);
+        }
+        return shortUrl.getOriginalUrl();
     }
 }
