@@ -24,6 +24,11 @@ public class ClickCounterService {
         redisTemplate.opsForValue().increment(PREFIX + code);
     }
 
+    public long pendingClicks(String code) {
+        String value = redisTemplate.opsForValue().get(PREFIX + code);
+        return value == null ? 0 : Long.parseLong(value);
+    }
+
     public int syncPendingClicks() {
         int synced = 0;
 
