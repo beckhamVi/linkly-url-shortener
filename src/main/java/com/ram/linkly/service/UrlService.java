@@ -6,11 +6,13 @@ import com.ram.linkly.exception.NotFoundException;
 import com.ram.linkly.repository.ShortUrlRepository;
 import com.ram.linkly.util.Base62Encoder;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -18,6 +20,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class UrlService {
     private final ShortUrlRepository shortUrlRepository;
+    //redis
+    private final StringRedisTemplate redisTemplate;
+    private static final String CACHE_PREFIX = "url:";
+    private static final Duration DEFAULT_TTL = Duration.ofHours(1);
 
     @Transactional
     public ShortUrl create(CreateUrlRequest request){
@@ -46,11 +52,28 @@ public class UrlService {
 
     @Transactional(readOnly = true)
     public String resolve(String code){
-        ShortUrl shortUrl = shortUrlRepository.findByCode(code)
-                .orElseThrow(() -> new NotFoundException("short URL not found" + code));
-        if (shortUrl.getExpiresAt() != null && !shortUrl.getExpiresAt().isAfter(Instant.now())){
-            throw new NotFoundException("short URL expired: " + code);
+        String cacheKey = CACHE_PREFIX + code;
+        String cached = redisTemplate.opsForValue().get(cacheKey);
+        if (cached != null) {
+            return cached;
         }
+
+        ShortUrl shortUrl = shortUrlRepository.findByCode(code)
+                .orElseThrow(() -> new NotFoundException("short URL not found: " + code));
+
+        if (shortUrl.getExpiresAt() != null && !shortUrl.getExpiresAt().isAfter(Instant.now())) {
+            throw new NotFoundException("short url expired " + code);
+        }
+
+        Duration ttl = DEFAULT_TTL;
+        if (shortUrl.getExpiresAt() != null) {
+            Duration untilExpiry = Duration.between(Instant.now(), shortUrl.getExpiresAt());
+            if (untilExpiry.compareTo(ttl) < 0) {
+                ttl = untilExpiry;
+            }
+        }
+
+        redisTemplate.opsForValue().set(cacheKey, shortUrl.getOriginalUrl(), ttl);
         return shortUrl.getOriginalUrl();
     }
 }
